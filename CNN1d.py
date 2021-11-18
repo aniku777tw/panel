@@ -1,7 +1,10 @@
-from tensorflow.keras.models import Sequential
 import glob
-from tensorflow.keras.layers import Dense,GlobalAveragePooling1D,Conv2D,MaxPool2D,Flatten,Input,Dropout,Conv1D,BatchNormalization,MaxPool1D
 import numpy as np
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.callbacks import ModelCheckpoint ,ReduceLROnPlateau ,EarlyStopping
+from tensorflow.keras.layers import (Dense,GlobalAveragePooling1D,Conv2D,
+                                     GlobalMaxPool1D,Flatten,Input,Dropout,
+                                     Conv1D,BatchNormalization,MaxPool1D)
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score,confusion_matrix,cohen_kappa_score
 from tensorflow.keras.utils import to_categorical
@@ -40,44 +43,45 @@ all_samples_pca = pca.fit_transform(all_samples_snv)
 bands = 210
 data = np.array(all_samples_sf).reshape(-1,bands,1)
 x,y,z = data.shape
-state = None
+state = 789456
 gt = to_categorical(gt,4)
-train_hsi_samples,test_hsi_samples,train_gt,test_gt= train_test_split(data,gt,test_size=0.7,random_state=state)
+train_hsi_samples,test_hsi_samples,train_gt,test_gt= train_test_split(data,gt,test_size=0.5,random_state=state)
 
 model = Sequential()
-model.add(Conv1D(32, 3, input_shape=(bands,1), padding="same", activation="relu",strides=1))
+model.add(Conv1D(128, 3, input_shape=(bands,1), padding="same", activation="relu",strides=1))
 model.add(BatchNormalization())
-model.add(Conv1D(16, 3, padding="same", activation="relu",strides=1))
-model.add(BatchNormalization())
-model.add(MaxPool1D())
-model.add(Conv1D(32, 3, input_shape=(bands,1), padding="same", activation="relu",strides=1))
-model.add(BatchNormalization())
-model.add(Conv1D(16, 3, padding="same", activation="relu",strides=1))
+model.add(Conv1D(128, 3, padding="same", activation="relu",strides=1))
 model.add(BatchNormalization())
 model.add(MaxPool1D())
+model.add(Conv1D(256, 3, input_shape=(bands,1), padding="same", activation="relu",strides=1))
+model.add(BatchNormalization())
+model.add(Conv1D(256, 3, padding="same", activation="relu",strides=1))
+model.add(BatchNormalization())
+model.add(GlobalMaxPool1D())
 
-model.add(Flatten())
+# model.add(Flatten())
+model.add(Dense(1024, activation = 'relu'))
+model.add(Dense(512, activation = 'relu'))
 model.add(Dense(128, activation = 'relu'))
-model.add(Dense(64, activation = 'relu'))
-model.add(Dense(32, activation = 'relu'))
 model.add(Dense(4, activation = 'softmax'))
 model.compile(loss='categorical_crossentropy',
                   optimizer='adam', metrics=['accuracy'])
 checkpoint_filepath = "D:\Solar panels\model\cnn1d.h5"
 
-model_checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
+model_checkpoint_callback =ModelCheckpoint(
     filepath=checkpoint_filepath,
     save_weights_only=True,
     monitor='val_loss',
     mode='min',
-    save_best_only=True)
+    save_best_only=True
+    ,verbose=1)
 
-reduce_lr = tf.keras.callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.2,
-                              patience=5, min_lr=0.001)
-es = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=100)
+reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.2,
+                              patience=5, min_lr=1e-6)
+es = EarlyStopping(monitor='val_loss', patience=100,verbose=1)
 
 
-history = model.fit(train_hsi_samples,train_gt,epochs=1000,batch_size=2,
+history = model.fit(train_hsi_samples,train_gt,epochs=1000,batch_size=32,
                     validation_split=0.2,verbose=1,
                     shuffle=True,callbacks=[model_checkpoint_callback,reduce_lr,es])
 

@@ -3,12 +3,45 @@ from spectral.io import envi
 import matplotlib.pyplot as plt
 import numpy as np
 import itertools
-from skimage import segmentation, measure
+from skimage import segmentation, measure,transform
 
 
 class DataLoading:
     
-    def grab_sample(data_name,data_path,save_path):
+    def grab_sample_cube(data_name,data_path,save_path):
+        # data_name = 'b2'
+        # data_path = r'D:\Solar panels\20211110\\'
+        data_path = data_path + data_name + "_RT"
+        
+        img = envi.open(data_path + '.hdr', data_path + '.raw').asarray()
+        w, h, b = img.shape
+        img_1d = img.reshape(-1, b)
+        
+        rb_model = ModelAccess.load_model('remove_bg_svm')
+        mask = rb_model.predict(img_1d).reshape(w,h)
+        img_masked = Preprocessing.masking(img,mask)
+        
+        roi_img = Preprocessing.roi(img_masked,mask,400)
+        
+
+        cube_data = []
+        
+        for i in roi_img:
+            resize_data = transform.resize(i,(87,185))
+            cube = np.reshape(resize_data,[87,185,b])
+            cube_data.append(cube)
+        
+        
+        plt.figure()
+        for i in range(len(cube_data)):
+            plt.subplot(int(pow(len(cube_data),1/2)) + 1,int(pow(len(cube_data),1/2)) + 1,i+1)
+            plt.imshow(cube_data[i][:,:,1])
+        all_data = np.array(cube_data)
+        # save_path = r"D:\Solar panels\roi\\"+ data_name
+        save_path = save_path + data_name
+        np.save(save_path ,all_data)  
+    
+    def grab_sample_average(data_name,data_path,save_path):
         # DataLoading.grab_sample('g1',"D:\Solar panels\\20211110\\","D:\Solar panels\\average\\FX10\\")
         data_path = data_path + data_name + "_RT"
         img = envi.open(data_path + '.hdr', data_path + '.raw').asarray()
@@ -213,7 +246,7 @@ class Painting:
         plt.tight_layout()
     
     
-    def plot_average_spectral(spectral_arrays,gt_arrays,components,types,eigens=None):
+    def plot_average_spectral(spectral_arrays,gt_arrays,components,types,eigens):
         plt.figure()
         for i,sa in enumerate(spectral_arrays):
             if gt_arrays[i] == 0:
@@ -227,7 +260,7 @@ class Painting:
         
         plt.legend([cb, cw, l, g], types)     
         
-        if eigens!=None:
-            for i, xc in enumerate(eigens[:components]):
-                plt.axvline(x=xc)
-                plt.title('train' + str(eigens[:components]))    
+
+        for i, xc in enumerate(eigens[:components]):
+            plt.axvline(x=xc)
+            plt.title('train' + str(eigens[:components]))    
